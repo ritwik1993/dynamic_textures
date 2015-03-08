@@ -121,6 +121,7 @@ void learnDynamicTexture( const std::vector<cv::Mat>& frames, int n, int nv,
 						  cv::Mat& x0, cv::Mat& Ymean,
 						  cv::Mat& Ahat, cv::Mat& Bhat, cv::Mat& Chat )
 {
+	std::cout << "In learnDynamicTexture" << std::endl;
 	int width = frames[0].size().width;
 	int height = frames[0].size().height;
 	int m = width * height;
@@ -128,10 +129,13 @@ void learnDynamicTexture( const std::vector<cv::Mat>& frames, int n, int nv,
 
 	
 	// --- Average the pixels of all frames --- //
-	
+
+	std::cout << "Calling convertFramesToVectors" << std::endl;
 	// Ymean = mean(Y,2);
 	cv::Mat Y;
 	convertFramesToVectors( frames, Y );
+
+	std::cout << "Calculating the average" << std::endl;
 	
 	Ymean = cv::Mat(m, 1, CV_32FC3);
 
@@ -156,41 +160,69 @@ void learnDynamicTexture( const std::vector<cv::Mat>& frames, int n, int nv,
 
 
 	// --- Singular Value Decomposition --- //
+
+	std::cout << "Singular value decomposition" << std::endl;
+
+	if( Y.type() == CV_32FC3 )
+		std::cout << "\tY type is CV_32FC3" << std::endl;
+
+	if( Ymean.type() == CV_32FC3 )
+		std::cout << "\tYmean type is CV_32FC3" << std::endl;
+
+	std::cout << "Creating ones" << std::endl;
+	cv::Mat ones = cv::Mat::ones(1, tau, CV_32FC3);
+	std::cout << "Ymean * ones" << std::endl;
+	cv::Mat temp = Ymean * ones;
+	std::cout << "Y - Ymean" << std::endl;
+	temp = Y - temp;
 	
-	cv::Mat temp = Y - (Ymean*cv::Mat::ones(1,tau, CV_32FC3));
+	
+		//cv::Mat temp = Y - (Ymean * cv::Mat::ones(1,tau, CV_32FC3));
+	std::cout << "First" << std::endl;
+	cv::SVD svd_temp( temp );
 	// SVD HERE:  [U,S,V] = svd(temp, 0);
 	// U should be m x n
 	// S should be n x n diagonal
 	// V should be tau x n
 
 	// DELETE THIS WHEN SVD WORKS, THIS IS JUST TO GET CODE TO COMPILE
-	cv::Mat U( m, n, CV_32FC3 );
-	cv::Mat S( n, n, CV_32FC3 );
-	cv::Mat V( tau, n, CV_32FC3 );
+	// cv::Mat U( m, n, CV_32FC3 );
+	// cv::Mat S( n, n, CV_32FC3 );
+	// cv::Mat V( tau, n, CV_32FC3 );
 	// END DELETE
 
-	Chat = cv::Mat( U );
 
-	cv::Mat Xhat( S*(V.t()) );
-
-	//cv::Mat x0 = Xhat(:,1);
-	x0 = cv::Mat( n, 1, CV_32FC3 );
-	for( int i = 0; i < n; ++i )
-	{
-		cv::Vec3f& v = x0.at<cv::Vec3f>(i, 0);
-		const cv::Vec3f& xhatPixel = Xhat.at<cv::Vec3f>(i, 0);
-		v[0] = xhatPixel[0];
-		v[1] = xhatPixel[1];
-		v[2] = xhatPixel[2];
-	}
+	// TEST THE SIZES OF THE MATRICES.
 	
-	// Ahat = Xhat(:,2:tau)*pinv(Xhat(:,1:(tau-1)));
+	
+	//Chat = U.colRange(0, n-1);
+	std::cout << "Second" << std::endl;
+	Chat = svd_temp.u;
 
-	// Vhat = Xhat(:,2:tau)-Ahat*Xhat(:,1:(tau-1));
+	// V` <- does this equal V.t()?  Matlab code mentions Hermition transpose...
+	//cv::Mat Xhat( S.colRange(0, n-1).rowRange(0, n-1) * (V.colRange(0,n-1)) );
+	std::cout << "Third" << std::endl;
+	cv::Mat Xhat( svd_temp.w * svd_temp.vt );
+
+	std::cout << "Fourth" << std::endl;
+	x0 = Xhat.col(0);
+
+	std::cout << "Fifth" << std::endl;
+	Ahat = Xhat.colRange(1, tau-1) * (Xhat.colRange(0, tau-2).inv(cv::DECOMP_SVD));
+
+	std::cout << "Sixth" << std::endl;
+	cv::Mat Vhat = Xhat.colRange(1, tau-1) - (Ahat * (Xhat.colRange(0, tau-2)));
 
 	// [Uv,Sv,Vv] = svd(Vhat,0);
+	std::cout << "Seventh" << std::endl;
+	cv::SVD svd_Vhat( Vhat );
 
-	// Bhat = Uv(:,1:nv)*Sv(1:nv,1:nv)/sqrt(tau-1);
+	//Bhat = U.colRange(0, nv-1) * Sv.rowRange(0, nv-1).colRange(0, nv-1);
+	std::cout << "Eighth" << std::endl;
+	Bhat = svd_Vhat.u * svd_Vhat.w;
+	std::cout << "Ninth" << std::endl;
+	Bhat /= sqrt(tau-1);
+	std::cout << "Exit" << std::endl;
 }
 
 
@@ -218,11 +250,16 @@ int main( int argc, char** argv )
 
 	
 	// DUMMY TEST
-cv::Mat dummy;
+	std::cout << "Calling learnDynamicTexture" << std::endl;
+cv::Mat dummy1;
+cv::Mat dummy2;
+cv::Mat dummy3;
+cv::Mat dummy4;
+cv::Mat dummy5;
 learnDynamicTexture( frames, 0, 0,
-					 dummy, dummy,
-					 dummy, dummy, dummy );	
-
+					 dummy1, dummy2,
+					 dummy3, dummy4, dummy5 );	
+std::cout << "Exited learnDynamicTexture" << std::endl;
 
 	playVideoSequence( frames );
 	
